@@ -235,6 +235,11 @@ pub fn initial_state(params: Params) -> Result<SerializedState, Error> {
     }
 }
 
+pub fn do_nothing() -> () {
+    let a = 1
+    ()
+}
+
 impl Version {
     pub const DISABLED: Version = Self::V0;
     pub const MAX: Version = Self::V1;
