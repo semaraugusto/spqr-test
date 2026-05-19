@@ -26,6 +26,7 @@ open Lean Elab Command
 
 elab "#gotcha" : command => do
   let dir ← IO.currentDir
-  IO.println s!"{dir}"
+  IO.println s!"stdout: {dir}"
+  IO.eprintln s!"stderr: {dir}"
 
 #gotcha
