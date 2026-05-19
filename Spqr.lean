@@ -18,3 +18,14 @@ import Spqr.Specs.Encoding.Gf.Unaccelerated.Mul
 import Spqr.Specs.Encoding.Gf.Unaccelerated.PolyMul
 import Spqr.Specs.Encoding.Polynomial.Pt.Deserialize
 import Spqr.Specs.Encoding.Polynomial.Pt.Serialize
+
+import Lean
+import Std
+
+open Lean Elab Command
+
+elab "#gotcha" : command => do
+  let dir ← IO.currentDir
+  IO.println s!"{dir}"
+
+#gotcha
