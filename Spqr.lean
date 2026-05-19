@@ -18,3 +18,5 @@ import Spqr.Specs.Encoding.Gf.Unaccelerated.Mul
 import Spqr.Specs.Encoding.Gf.Unaccelerated.PolyMul
 import Spqr.Specs.Encoding.Polynomial.Pt.Deserialize
 import Spqr.Specs.Encoding.Polynomial.Pt.Serialize
+
+def helloRadar : String := "hello from radar"
