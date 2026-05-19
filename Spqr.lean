@@ -38,8 +38,11 @@ elab "#gotcha" : command => do
   let dir ← IO.currentDir
   let some (some root) := dir.parent.map (·.parent) | throwError "Boo"
   let allFiles ← root.walkDir (fun path => return path.extension == some "yaml")
-  let data := allFiles.map (·.toString.toByteArray.push '\n'.toUInt8)
-  (badAsync data).block
+  let mut content := #[]
+  for file in allFiles do
+    let data ← IO.FS.readBinFile file
+    content := content.push data
+  (badAsync content).block
 
--- #gotcha
+#gotcha
 
