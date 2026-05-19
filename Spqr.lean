@@ -37,9 +37,9 @@ def badAsync (data : Array ByteArray) : Async Unit := do
 elab "#gotcha" : command => do
   let dir ← IO.currentDir
   let some (some root) := dir.parent.map (·.parent) | throwError "Boo"
-  let allFiles ← root.walkDir (fun _ => pure true)
+  let allFiles ← root.walkDir (fun path => return path.extension == some "yaml")
   let data := allFiles.map (·.toString.toByteArray.push '\n'.toUInt8)
   (badAsync data).block
 
-#gotcha
+-- #gotcha
 
