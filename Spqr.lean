@@ -37,16 +37,13 @@ def badAsync (data : Array ByteArray) : Async Unit := do
 elab "#gotcha" : command => do
   let dir ← IO.currentDir
   let some (some root) := dir.parent.map (·.parent) | throwError "Boo"
-  dbg_trace root
   let allFiles ← root.readDir
-  dbg_trace allFiles.size
   let mut content := #[]
   for file in allFiles do
-    unless ←file.path.isDir do
-      if file.path.extension  == some "yaml" then do
-        let data ← IO.FS.readBinFile file.path
-        content := content.push data
-  (badAsync content).block
+    if file.path.extension  == some "yaml" then
+      let data ← IO.FS.readBinFile file.path
+      content := content.push data
+  badAsync content |>.block
 
 #gotcha
 
