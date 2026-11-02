@@ -235,7 +235,7 @@ pub fn initial_state(params: Params) -> Result<SerializedState, Error> {
 }
 
 pub fn do_nothing() -> () {
-    let a = 1
+    let a = 1;
     ()
 }
 
