@@ -1,11 +1,14 @@
 /-
-Copyright 2026 The Beneficial AI Foundation. All rights reserved.
-Released under Apache 2.0 license as described in the file LICENSE.
+Copyright (c) 2026 The Beneficial AI Foundation. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE-APACHE.
 Authors: Hoang Le Truong
 -/
+module
+
 import Spqr.Math.Gf16.Irreducible
-import Spqr.Code.Types
-import Mathlib.FieldTheory.Finite.GaloisField
+public import SrcTranslated.Types
+public import Mathlib.FieldTheory.Finite.GaloisField
+public import Spqr.Math.Gf16.Basic
 
 /-!
 # The construction of GF(2¹⁶)
@@ -25,8 +28,11 @@ Note: this development is intended to be upstream-friendly so that it can be reu
 projects working with the same Galois field.
 -/
 
+@[expose] public section
+
 open Polynomial
 
+/-- The Galois field GF(2^16), used as the coefficient field for SPQR polynomial encoding. -/
 abbrev GF216 := GaloisField 2 16
 
 namespace spqr.math.gf
@@ -72,3 +78,5 @@ Interpret a `GF16` field element as an element of `GF216 = GF(2¹⁶)`, using th
 noncomputable def toGF216 (g : GF16) : GF216 := g.value.val.toGF216
 
 end spqr.encoding.gf.GF16
+
+deriving instance Inhabited for spqr.encoding.gf.GF16

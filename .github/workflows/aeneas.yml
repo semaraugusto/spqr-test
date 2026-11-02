@@ -1,36 +1,50 @@
-# Confirm Aeneas extraction succeeds 
+# Confirm Aeneas extraction succeeds
 
 name: Aeneas extraction
 on:
   push:
-    branches: [ '**' ]
+    branches: [ 'main' ]
     paths:
       - 'Spqr/**'
       - 'lakefile.toml'
       - 'lean-toolchain'
-      - '.github/workflows/lean.yml'
-  # since it is required for merging, it must run on each PR even if the files affected aren't in paths
-  # see https://docs.github.com/en/enterprise-cloud@latest/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks#handling-skipped-but-required-checks
-  pull_request: 
+      - '.github/workflows/aeneas.yml'
+      - 'aeneas-config.yml'
+      - 'translation-patches/**'
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - 'scripts/**'
+  # Since the check is required for merging, it must run on every PR even
+  # when no relevant files changed (GitHub treats a skipped required check
+  # as "not passed").  Restricting `push` to main avoids duplicate runs on
+  # PR branches.
+  # See https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks#handling-skipped-but-required-checks
+  pull_request:
     branches: [ '**' ]
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   extract:
     name: Check Aeneas Extraction
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential git curl opam pkg-config libgmp-dev protobuf-compiler
-
-      - name: Initialize opam
-        run: opam init --disable-sandboxing -y -a
+          sudo apt-get install -y build-essential git curl pkg-config libgmp-dev protobuf-compiler
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -42,14 +56,6 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache OCaml environment
-        uses: actions/cache@v5
-        with:
-          path: ~/.opam
-          key: ${{ runner.os }}-opam-v1
-          restore-keys: |
-            ${{ runner.os }}-opam-
 
       - name: Cache Rust build artifacts
         uses: actions/cache@v5
@@ -63,26 +69,32 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Cache Aeneas build
+      - name: Cache Aeneas release bundle
         uses: actions/cache@v5
         with:
           path: .aeneas
-          key: ${{ runner.os }}-aeneas-${{ hashFiles('aeneas-config.yml') }}
+          # The Aeneas release tag is pinned in lakefile.toml.
+          key: ${{ runner.os }}-aeneas-${{ hashFiles('lakefile.toml') }}
           restore-keys: |
             ${{ runner.os }}-aeneas-
 
       - name: Install Aeneas
         run: npm run aeneas-install
 
+      - name: Check translation patches
+        run: npm run patches-check
+
       - name: Extract to Lean
         run: npm run aeneas-extract
 
       - name: Check for modifications in generated files
         run: |
-          if git diff --exit-code; then
+          if [ -z "$(git status --porcelain)" ]; then
             echo "Generated files match committed versions"
           else
-            echo "Generated files differ from committed versions"
+            echo "Generated files differ from committed versions (or new files appeared):"
+            git status --porcelain
+            git diff | head -200
             echo ""
             echo "Run 'npm run aeneas-extract' locally and commit the results."
             exit 1

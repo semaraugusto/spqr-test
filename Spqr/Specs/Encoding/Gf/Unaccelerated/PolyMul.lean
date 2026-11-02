@@ -1,10 +1,17 @@
 /-
-Copyright 2026 The Beneficial AI Foundation. All rights reserved.
-Released under Apache 2.0 license as described in the file LICENSE.
+Copyright (c) 2026 The Beneficial AI Foundation. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE-APACHE.
 Authors: Hoang Le Truong
 -/
-import Spqr.Code.Funs
-import Spqr.Math.Gf16.Field
+module
+
+public import SrcTranslated.Funs
+public import Spqr.Math.Gf16.Field
+import Mathlib.Algebra.Order.Ring.Star
+import Mathlib.Order.Int.ConditionallyCompleteOrder
+import Mathlib.RingTheory.Polynomial.Basic
+import Mathlib.Tactic.ComputeDegree
+import Spqr.Math.Gf16.Irreducible
 
 /-! # Spec theorem for `spqr::encoding::gf::unaccelerated::poly_mul`
 
@@ -28,6 +35,8 @@ them rather than re-proving them.
 
 **Source**: spqr/src/encoding/gf.rs (lines 381:4-427:5)
 -/
+
+@[expose] public section
 
 open Aeneas Aeneas.Std Result
 open Polynomial
@@ -133,7 +142,7 @@ theorem clmul_poly_eq_mul (a b : BinaryPoly) (n : Nat)
   | succ n ih =>
     dsimp [clmul_poly]
     by_cases hcoeff : b.coeff n ≠ 0
-    · rw [if_pos hcoeff]
+    · rw [ite_eq_left hcoeff]
       have hc1 : b.coeff n = 1 := by
         have hlt := (b.coeff n).isLt
         have hne : (b.coeff n).val ≠ 0 := fun h => hcoeff (Fin.ext h)
@@ -147,7 +156,7 @@ theorem clmul_poly_eq_mul (a b : BinaryPoly) (n : Nat)
       rcases eq_or_ne (b - X ^ n) 0 with hzero | hne
       · rw [hzero, clmul_poly_b_zero, zero_add, sub_eq_zero.mp hzero]
       · have hdeg : (b - X ^ n).natDegree < n := by
-          by_contra hge; push_neg at hge
+          by_contra hge; push Not at hge
           have hlc := leadingCoeff_ne_zero.mpr hne
           unfold leadingCoeff at hlc
           have : (b - X ^ n).coeff (b - X ^ n).natDegree = 0 := by
@@ -158,7 +167,7 @@ theorem clmul_poly_eq_mul (a b : BinaryPoly) (n : Nat)
               exact coeff_eq_zero_of_natDegree_lt (by omega)
           exact hlc this
         rw [ih (b - X ^ n) hdeg]; ring
-    · rw [if_neg hcoeff]; push_neg at hcoeff
+    · rw [ite_eq_right hcoeff]; push Not at hcoeff
       rcases eq_or_ne b 0 with rfl | hb0
       · simp [clmul_poly_b_zero]
       · have hlt : b.natDegree < n := by
@@ -187,6 +196,12 @@ lemma poly_u16_eq_u32 (a : U16) (me : U32) (h : me = UScalar.cast UScalarTy.U32 
   congr 1
   subst h
   exact (UScalar.cast_val_mod_pow_greater_numBits_eq UScalarTy.U32 a (by simp)).symm
+
+/-- `x ↦ a ^^^ x` is injective on `Nat`. (Mathlib's `Nat.xor_right_inj` was removed.) -/
+private theorem nat_xor_right_inj {a b c : Nat} : a ^^^ b = a ^^^ c ↔ b = c := by
+  refine ⟨fun h => ?_, fun h => h ▸ rfl⟩
+  have := congrArg (a ^^^ ·) h
+  simpa only [← Nat.xor_assoc, Nat.xor_self, Nat.zero_xor] using this
 
 private theorem testBit_of_and_one_shiftLeft_ne_zero {n k : Nat}
     (h : n &&& (1 <<< k) ≠ 0) : n.testBit k = true := by
@@ -253,27 +268,30 @@ theorem poly_mul_loop_spec (b : Std.U16) (acc : Std.U32) (me : Std.U32)
   · intro ⟨acc', shift'⟩ ⟨hShift', hInv', hMe'⟩
     simp only []
     unfold poly_mul_loop.body
-    simp only []
+    -- simp only []
     by_cases hLt : shift'.val < 16
     · simp only [UScalar.lt_equiv, UScalar.ofNatCore_val_eq, hLt,
       ↓reduceIte, bne_iff_ne, ne_eq, UScalar.neq_to_neq_val,
-      ReduceNat.reduceNatEq, bind_tc_ok, ite_not, Nat.reducePow, and_assoc]
+      ReduceNat.reduceNatEq, ite_not, Nat.reducePow, and_assoc]
       step*
-      · have : b.val.testBit shift'.val = False := by
-          have hmod : 1 <<< shift'.val % U16.size = 1 <<< shift'.val :=
-            Nat.mod_eq_of_lt (by
-              rw [Nat.one_shiftLeft, show U16.size = 2 ^ 16 from by simp [U16.size, U16.numBits]]
-              exact Nat.pow_lt_pow_right (by omega) hLt)
-          have h := not_testBit_of_and_one_shiftLeft_eq_zero
-            (n := b.val) (k := shift'.val) (by rw [← hmod]; simp_all)
-          simp [h]
-        constructor
-        · grind
-        · constructor
-          · simp [shift1_post, clmul, this]
-            simp_all
+      split
+      · step*
+        · have : b.val.testBit shift'.val = False := by
+            have hmod : 1 <<< shift'.val % U16.size = 1 <<< shift'.val :=
+              Nat.mod_eq_of_lt (by
+                rw [Nat.one_shiftLeft, show U16.size = 2 ^ 16 from by simp [U16.size, U16.numBits]]
+                exact Nat.pow_lt_pow_right (by omega) hLt)
+            have h := not_testBit_of_and_one_shiftLeft_eq_zero
+              (n := b.val) (k := shift'.val) (by rw [← hmod]; simp_all)
+            simp [h]
+          constructor
           · grind
-      · have : b.val.testBit shift'.val = True := by
+          · constructor
+            · simp [shift1_post, clmul, this]
+              simp_all
+            · grind
+      · step*
+        have : b.val.testBit shift'.val = True := by
           have hmod : 1 <<< shift'.val % U16.size = 1 <<< shift'.val :=
             Nat.mod_eq_of_lt (by
               rw [Nat.one_shiftLeft, show U16.size = 2 ^ 16 from by simp [U16.size, U16.numBits]]
@@ -287,7 +305,7 @@ theorem poly_mul_loop_spec (b : Std.U16) (acc : Std.U32) (me : Std.U32)
           · simp only [UScalar.val_xor, shift1_post, clmul, this, ↓reduceIte]
             simp_all only [Nat.reducePow, UScalarTy.U16_numBits_eq, Bvify.U16.UScalar_bv,
             U16.ofNat_bv, UScalar.val_and, UScalarTy.U32_numBits_eq, Bvify.U32.UScalar_bv,
-            eq_iff_iff, iff_true, Nat.xor_right_inj]
+            eq_iff_iff, iff_true, nat_xor_right_inj]
             apply Nat.mod_eq_of_lt
             simp only [Nat.shiftLeft_eq]
             have : 2 ^ shift'.val ≤ 2 ^ 16 :=

@@ -551,8 +551,7 @@ impl GF16 {
         let mut square = *other * *other;
         let mut out = *self;
         for _i in 1..16 {
-            out *= square;
-            square = square * square;
+            (square.value, out.value) = mul2_u16(square.value, square.value, out.value);
         }
         out
     }
@@ -592,8 +591,8 @@ impl GF16 {
 #[cfg(test)]
 mod test {
     use super::*;
-    use galois_field_2pm::GaloisField;
     use galois_field_2pm::gf2::GFu16;
+    use galois_field_2pm::GaloisField;
     use rand::RngCore;
 
     // https://web.eecs.utk.edu/~jplank/plank/papers/CS-07-593/primitive-polynomial-table.txt

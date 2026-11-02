@@ -1,0 +1,139 @@
+/-
+Copyright (c) 2026 The Beneficial AI Foundation. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE-APACHE.
+Authors: Liao Zhang
+-/
+module
+
+public import SrcTranslated.Funs
+public import Spqr.Specs.V1.Chunked.States.Serialize.DecodeVarint
+
+/-! # Spec theorem for `spqr::v1::chunked::states::serialize::decode_chunk`
+
+`decode_chunk` reads a `Chunk` from the byte buffer `from` at cursor `at`, advancing the cursor
+past the bytes it consumed.  A chunk is serialized as
+
+  `[varint(index)] ++ [data (32 bytes)]`
+
+so decoding is `decode_varint` followed by a verbatim 32-byte read; the chunk index is rejected
+if it does not fit in a `u16`.
+
+We prove functional correctness: on success the index is the LEB128 decoding (`varintVal`) of
+the `n` bytes consumed by `decode_varint`, the payload is exactly the next 32 bytes of the
+buffer, and the cursor ends at `at + n + 32`, still within the buffer.  Two points deserve
+mention.
+
+* **Precondition.** The extraction drops the source's `hax_lib::assume!(*at < usize::MAX - 32)`,
+  so `*at += 32` is a fallible addition.  We discharge it from `from.len() + 32 ≤ usize::MAX`,
+  which is weaker than a bound on the entry cursor: `decode_varint` already guarantees
+  `at ≤ from.len()` on the path where the addition happens.
+* **Cursor on failure.** The source mutates `*at` *before* the bounds check, so on the two
+  error paths of `decode_chunk` itself the cursor has already advanced by `n + 32` — unlike
+  `decode_varint`, which leaves it untouched on failure.  Hence the postcondition only claims
+  monotonicity `at ≤ *future(at)`, not `*future(at) = at`, in the error case.  This is what the
+  caller `Message::deserialize` relies on: its `ensures` constrains the cursor on success only.
+
+Unlike the other specs in this directory, the axiom closure of `decode_chunk_spec` contains two
+extra axioms, both coming from the extracted `.expect("correct size")` in the function body and
+not from the proof: Aeneas models `core::fmt::Formatter` as an opaque type (`axiom`), and its
+`toStr` discharges the string-literal length side condition with `by decide +native`, whose
+`native_decide` axiom is shared through the first extraction site,
+`chain.ChainEpochDirection.next_key_internal._proof_6`.
+
+**Source**: src/v1/chunked/states/serialize.rs (lines 141-153)
+-/
+
+@[expose] public section
+
+open Aeneas Aeneas.Std Result Error
+
+-- Use the no-overflow cast spec so `step` learns `(cast .U16 val).val = val.val` directly,
+-- avoiding bit-vector reasoning about the `index as u16` conversion.
+attribute [local step] UScalar.cast_inBounds_spec
+
+namespace spqr.v1.chunked.states.serialize
+
+/-- `chunkBlockAt bytes start n c`: bytes `start, …, start + n + 31` lie inside `bytes` and
+form a chunk block — a LEB128 block of `n` bytes decoding to `c.index` (`varintBlockAt`)
+followed by the 32 payload bytes `c.data`.  These are exactly the success conjuncts of
+`decode_chunk_spec` below. -/
+def chunkBlockAt (bytes : List Std.U8) (start n : ℕ) (c : encoding.Chunk) : Prop :=
+  varintBlockAt bytes start n c.index.val ∧
+  start + n + 32 ≤ bytes.length ∧
+  c.data.val = bytes.slice (start + n) (start + n + 32)
+
+/-- **Spec theorem for `spqr::v1::chunked::states::serialize::decode_chunk`**:
+
+The cursor never moves backwards and, on success, `decode_chunk` consumed a varint of `n` bytes
+(`1 ≤ n ≤ 10`) followed by the 32-byte payload, all within the buffer: the cursor ends at
+`at + n + 32 ≤ from.len()`, the chunk index is the LEB128 decoding of the varint bytes — so
+the decoded value fits in a `u16`, since `c.index` does — and the chunk payload is exactly
+`from[at + n .. at + n + 32]`.  On failure the error is `MsgDecode`.
+
+The varint block is characterized by the shared `varintBlockAt` predicate, so the byte-level
+conjuncts — byte `n-1` is the terminator (high bit clear) and bytes `0, …, n-2` are
+continuation bytes (high bit set) — are literally the ones `decode_varint_spec` establishes.
+They are what pins `n` down to a single value for a given buffer. `decode_chunk_of_block`
+below gives the converse: a chunk block at the cursor is decoded. -/
+@[step]
+theorem decode_chunk_spec
+    (from1 : Slice Std.U8) (at1 : Std.Usize)
+    (hlen : from1.length + 32 ≤ Std.Usize.max) :
+    decode_chunk from1 at1 ⦃ (p : (core.result.Result encoding.Chunk Error) × Std.Usize) =>
+      at1.val ≤ p.2.val ∧
+      (match p.1 with
+       | .Ok c =>
+          ∃ n, p.2.val = at1.val + n + 32 ∧ chunkBlockAt from1.val at1.val n c
+       | .Err e => e = Error.MsgDecode) ⦄ := by
+  unfold decode_chunk
+  step
+  match r with
+  | .Err e =>
+    -- `?` propagates the error and returns the cursor as `decode_varint` left it.
+    step*
+  | .Ok v =>
+    obtain ⟨_hin, n, hat2, hn1, hn10, hnlen, hval, hterm, hcont⟩ :
+        _ < from1.length ∧ ∃ n, _ = _ + n ∧ varintBlockAt from1.val _ n v.val := by
+      assumption
+    -- Reduce `?` on the `Ok` eagerly: this feeds the decoded value into the continuation
+    -- directly, instead of leaving it behind a `ControlFlow` equation on a fresh variable.
+    simp only [core.result.Result.Insts.CoreOpsTry.branch]
+    -- `step*` runs the cursor advance, both bounds checks (closing the two error paths), the
+    -- `u16` cast and the 32-byte subslice; the overflow guard follows from `hlen` and `hnlen`.
+    step*
+    match r1 with
+    | .Err () =>
+      -- The subslice spans `[at2, at2 + 32)`, so `try_into` cannot have failed.
+      exact absurd (by scalar_tac : s.length = 32) ‹_›
+    | .Ok a =>
+      obtain ⟨ha, _halen⟩ : a.val = s.val ∧ a.length = 32 := by assumption
+      simp only [core.result.Result.expect, bind_ok, WP.spec_ok]
+      refine ⟨by scalar_tac, n, by scalar_tac,
+        ⟨hn1, hn10, hnlen, by rw [‹i1.val = v.val›, hval], hterm, hcont⟩, by scalar_tac, ?_⟩
+      simp [*]
+
+/-- If `chunkBlockAt from1.val at1.val n c` holds, then `decode_chunk from1 at1` returns `c` and
+moves the cursor to `at1 + n + 32`. -/
+theorem decode_chunk_of_block (from1 : Slice Std.U8) (at1 : Std.Usize) (n : ℕ)
+    (c : encoding.Chunk) (hblk : chunkBlockAt from1.val at1.val n c) :
+    decode_chunk from1 at1 ⦃ (p : (core.result.Result encoding.Chunk Error) × Std.Usize) =>
+      p.1 = .Ok c ∧ p.2.val = at1.val + n + 32 ⦄ := by
+  obtain ⟨hvb, hend, hdata⟩ := hblk
+  -- The block ends inside the slice, so the cursor's `+ 32` cannot overflow.
+  have hlen : at1.val + n + 32 ≤ Std.Usize.max := by scalar_tac
+  unfold decode_chunk
+  step with decode_varint_of_block from1 at1 n c.index.val hvb as ⟨r, at2, w, hr, hwv, hat2⟩
+  subst hr
+  simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok]
+  step*
+  match r1 with
+  | .Err () => exact absurd (by scalar_tac : s.length = 32) ‹_›
+  | .Ok a =>
+    obtain ⟨ha, _⟩ : a.val = s.val ∧ a.length = 32 := by assumption
+    simp only [core.result.Result.expect, bind_ok, WP.spec_ok]
+    refine ⟨?_, by scalar_tac⟩
+    obtain ⟨ci, cd⟩ := c
+    simp only [core.result.Result.Ok.injEq, encoding.Chunk.mk.injEq]
+    refine ⟨UScalar.eq_of_val_eq (by rw [i1_post]; exact hwv), Aeneas.Std.Array.ext _ _ ?_⟩
+    rw [ha, s_post, hdata]; simp only [at2_post, hat2]
+end spqr.v1.chunked.states.serialize

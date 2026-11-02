@@ -1,10 +1,18 @@
 /-
-Copyright 2026 The Beneficial AI Foundation. All rights reserved.
-Released under Apache 2.0 license as described in the file LICENSE.
+Copyright (c) 2026 The Beneficial AI Foundation. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE-APACHE.
 Authors: Hoang Le Truong
 -/
-import Spqr.Math.Gf2Poly.Basic
+module
+
+import Mathlib.Data.Nat.Bitwise
 import Mathlib.Tactic.IntervalCases
+public import Spqr.Math.Gf2Poly.Basic
+public import Mathlib.Algebra.Polynomial.Degree.Defs
+import Mathlib.Algebra.Order.Ring.Star
+import Mathlib.Order.Int.ConditionallyCompleteOrder
+import Mathlib.RingTheory.Polynomial.Basic
+
 
 /-!
 # Computable Nat-level representation of `BinaryPoly`
@@ -17,6 +25,8 @@ This module provides the computational backbone for verifying irreducibility of 
 polynomials: the `decide`-friendly functions operate on natural numbers, and the bridge lemmas
 connect their results back to the abstract polynomial ring `BinaryPoly = (ZMod 2)[X]`.
 -/
+
+public section
 
 open Polynomial
 
@@ -56,7 +66,7 @@ private lemma natBinaryPolyModAux_preserves_dvd (b a fuel : Nat) (hb : b ≥ 2) 
     split
     · simp [sub_self]
     · rename_i hlog
-      push_neg at hlog
+      push Not at hlog
       set shift := a.log2 - b.log2
       set a' := a ^^^ (b <<< shift)
       have hstep : natToBinaryPoly a - natToBinaryPoly a' =
@@ -99,7 +109,7 @@ private lemma natBinaryPolyModAux_log2_lt (b a fuel : Nat) (hb : b ≥ 2)
       · right
         exact hlt
     · rename_i hlog
-      push_neg at hlog
+      push Not at hlog
       set shift := a.log2 - b.log2
       set a' := a ^^^ (b <<< shift)
       have ha_pos : a ≥ 2 := by
@@ -239,17 +249,20 @@ lemma natToBinaryPoly_surjective (q : BinaryPoly) : ∃ n, natToBinaryPoly n = q
     exact ⟨np ^^^ nr, natToBinaryPoly_xor np nr⟩
   | monomial n a =>
     fin_cases a
-    · exact ⟨0, by simp [natToBinaryPoly_zero]⟩
+    · refine ⟨0, ?_⟩
+      simp only [natToBinaryPoly_zero]
+      exact (monomial_zero_right n).symm
     · refine ⟨2 ^ n, ?_⟩
       rw [natToBinaryPoly_two_pow]
       simp [X_pow_eq_monomial]
+      rfl
 
 lemma exists_natToBinaryPoly_eq_of_one_le_natDegree (q : BinaryPoly)
     (hd : 1 ≤ q.natDegree) : ∃ b, b ≥ 2 ∧ natToBinaryPoly b = q := by
   obtain ⟨n, hn⟩ := natToBinaryPoly_surjective q
   refine ⟨n, ?_, hn⟩
   by_contra h
-  push_neg at h
+  push Not at h
   interval_cases n
   · simp only [natToBinaryPoly_zero] at hn
     rw [← hn] at hd

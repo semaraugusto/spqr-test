@@ -1,10 +1,15 @@
 /-
-Copyright 2026 The Beneficial AI Foundation. All rights reserved.
-Released under Apache 2.0 license as described in the file LICENSE.
+Copyright (c) 2026 The Beneficial AI Foundation. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE-APACHE.
 Authors: Hoang Le Truong
 -/
-import Spqr.Math.Gf2Poly.Basic
-import Mathlib.Algebra.Polynomial.Div
+module
+
+public import Spqr.Math.Gf2Poly.Basic
+public import Mathlib.Algebra.Polynomial.Div
+import Mathlib.Algebra.Order.Ring.Star
+import Mathlib.Order.Int.ConditionallyCompleteOrder
+import Mathlib.RingTheory.Polynomial.Basic
 
 /-!
 # Generic monic-polynomial utilities
@@ -13,6 +18,8 @@ A generic lemma `ringHom_modByMonic` that says any ring homomorphism vanishing o
 `P` commutes with reduction modulo `P`.
 -/
 
+@[expose] public section
+
 open Polynomial
 
 namespace spqr.math.gf
@@ -20,11 +27,10 @@ namespace spqr.math.gf
 lemma ringHom_modByMonic
     {R : Type*} [CommRing R]
     (φ : BinaryPoly →+* R)
-    (P : BinaryPoly) (hMonic : P.Monic) (hφ : φ P = 0)
+    (P : BinaryPoly) (hφ : φ P = 0)
     (p : BinaryPoly) :
     φ (p %ₘ P) = φ p := by
-  have heq : p %ₘ P + P * (p /ₘ P) = p :=
-    Polynomial.modByMonic_add_div p hMonic
+  have heq : p %ₘ P + P * (p /ₘ P) = p := Polynomial.modByMonic_add_div p _
   have h1 : φ p = φ (p %ₘ P + P * (p /ₘ P)) := by rw [heq]
   have h2 :
       φ (p %ₘ P + P * (p /ₘ P)) = φ (p %ₘ P) + φ P * φ (p /ₘ P) := by

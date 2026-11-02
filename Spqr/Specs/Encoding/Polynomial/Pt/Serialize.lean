@@ -1,9 +1,12 @@
 /-
-Copyright 2026 The Beneficial AI Foundation. All rights reserved.
-Released under Apache 2.0 license as described in the file LICENSE.
+Copyright (c) 2026 The Beneficial AI Foundation. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE-APACHE.
 Authors: Hoang Le Truong
 -/
-import Spqr.Code.Funs
+module
+
+public import SrcTranslated.Funs
+import Spqr.Specs.Aeneas.IndexRangeFull
 
 /-! # Spec Theorem for `Pt::serialize`
 
@@ -25,6 +28,8 @@ ensures that the serialized bytes faithfully represent the original point, and t
 
 **Source**: spqr/src/encoding/polynomial.rs (lines 32:4-37:5)
 -/
+
+@[expose] public section
 
 open Aeneas Aeneas.Std Result
 
@@ -56,38 +61,6 @@ natural language specs:
 • Together with `Pt::deserialize`, the encoding is invertible:
     `Pt::deserialize(pt.serialize()) = ok pt`
 -/
-
-
-/-- `RangeFull` indexing on a slice is the identity: `slice[..] = slice`. -/
-private theorem rangeFull_index_eq {T : Type}
-    (r : core.ops.range.RangeFull) (s : Slice T) :
-    core.ops.range.RangeFull.Insts.CoreSliceIndexSliceIndexSliceSlice.index r s =
-    ok s := by
-  rfl
-
-@[simp, step_simps]
-private theorem array_index_rangeFull_ok {T : Type} {N : Usize}
-    (a : Array T N) :
-    core.array.Array.index
-      (core.ops.index.IndexSlice
-        (core.ops.range.RangeFull.Insts.CoreSliceIndexSliceIndexSliceSlice T))
-      a () =
-    ok a.to_slice :=
-  rangeFull_index_eq () a.to_slice
-
-/-- `clone_from_slice` for `u8` copies the source slice into the destination, returning a slice
-    whose contents and length equal those of the source. -/
-@[step]
-private lemma clone_from_slice_U8_spec
-    (dst src : Slice Std.U8) :
-    core.slice.Slice.clone_from_slice core.clone.CloneU8 dst src
-    ⦃ result =>
-      result.val = src.val ∧ result.length = src.length ⦄ := by
-  unfold core.slice.Slice.clone_from_slice
-  apply WP.spec_mono (Slice.clone_spec (fun x _ => by simp))
-  intro s' h
-  subst h
-  exact ⟨rfl, rfl⟩
 
 /- **Spec for `U16::to_be_bytes`**:
 The two-byte big-endian encoding of a `u16` value `x` satisfies
@@ -122,8 +95,6 @@ theorem serialize_spec (self : spqr.encoding.polynomial.Pt) :
       (result[2]!).val * 256 + (result[3]!).val = self.y.value.val ⦄ := by
   unfold serialize
   step*
-  simp_all only [Array.to_slice]
-  simp_lists
-  grind
+  simp_all [List.setSlice!]
 
 end spqr.encoding.polynomial.Pt
